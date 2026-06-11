@@ -1,5 +1,4 @@
-# GRADUATION THESIS
-# PRIVACY LEAKAGE OF MASQUE PROTOCOL THROUGH WEBSITE FINGERPRINTING
+# GRADUATION THESIS: PRIVACY LEAKAGE OF MASQUE PROTOCOL THROUGH WEBSITE FINGERPRINTING
 ## DEEPMASQUE
 DeepMASQUE is a deep learning pipeline for website fingerprinting of MASQUE/QUIC encrypted traffic. Given a captured traffic trace between a client and a MASQUE proxy, the model identifies which website the user is visiting solely from observable packet metadata including direction, inter-arrival time, payload size, and flow-level statistics, without decrypting any content.
 The model adapts the Var-CNN architecture with 1D ResNet-18 branches using dilated causal convolutions and extends it with a Supervised Contrastive (SupCon) loss jointly optimized alongside cross-entropy classification during end-to-end training. This joint objective produces a geometrically structured embedding space that enables reliable open-world detection of unmonitored websites as a natural byproduct of training.
