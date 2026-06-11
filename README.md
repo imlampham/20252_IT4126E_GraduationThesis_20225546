@@ -7,5 +7,6 @@ The model adapts the Var-CNN architecture with 1D ResNet-18 branches using dilat
 ## DATASET
 The dataset consists of MASQUE encrypted traffic captured through a Cloudflare proxy using the usque client library and a Docker-based automated testbed with Selenium and tcpdump. It covers 300 monitored websites selected from the Tranco top list with up to 500 traces each, along with 6000 unmonitored websites for open-world evaluation and an independently collected Switzerland dataset of 300 websites.
 
-* **[MASQUE 300-Web Dataset](https://www.kaggle.com/datasets/lampdp/masque-300-web)**: Contains up to 500 traces per website for the 300 monitored and 6,000 unmonitored websites.
+* **[MASQUE 300-Web Dataset](https://www.kaggle.com/datasets/lampdp/masque-300-web)**: Contains up to 500 traces per website for the 300 monitored websites.
+* **[MASQUE 6000-Web Dataset](https://www.kaggle.com/datasets/lampdp/masque-open-world)**: Contains up to 10 traces per website for the 6000 unmonitored websites, specifically curated for open-world evaluation scenarios.
 * **[Switzerland Dataset](https://www.kaggle.com/datasets/lampdp/masque-switzerland-300-web)**: An independently collected dataset covering 300 websites in Switzerland for cross-dataset evaluation.
