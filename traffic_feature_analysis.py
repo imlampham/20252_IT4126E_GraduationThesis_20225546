@@ -18,7 +18,6 @@ OUTPUT_DIR  = r"D:\Documents\ĐATN\quic_output\final5"
 SAMPLE_MODE = "random"         # "random" | "first" | "last"
 TSHARK_PATH = r"D:\Wireshark\tshark.exe"             
 
-# ╚══════════════════════════════════════════════════════════════╝
 
 BG    = "#0D1117"
 PANEL = "#161B22"
