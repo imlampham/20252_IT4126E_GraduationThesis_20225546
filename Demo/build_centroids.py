@@ -1,30 +1,13 @@
-#!/usr/bin/env python3
-"""
-build_centroids.py — Tính centroid cho DeepMASQUE
-==================================================
-Chạy 1 lần trước khi demo để cache centroids.
-
-Usage:
-    python3 scripts/build_centroids.py
-
-Output:
-    checkpoints/centroids.npy
-    checkpoints/label_map.json
-    checkpoints/scaler.pkl
-    checkpoints/selector.pkl
-"""
-
 import os, sys, gc, json, time, pickle
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, f_classif
 
-# ── đường dẫn tương đối từ root project ──
 ROOT         = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASET_DIR  = os.path.join(ROOT, "Demo/dataset")
 CKPT_DIR     = os.path.join(ROOT, "Demo/checkpoints")
-WEIGHTS_PATH = os.path.join(CKPT_DIR, "latest.weights.h5")
+WEIGHTS_PATH = os.path.join(CKPT_DIR, "best.weights.h5")
 OUT_CENTROIDS = os.path.join(CKPT_DIR, "centroids.npy")
 OUT_LABELS    = os.path.join(CKPT_DIR, "label_map.json")
 OUT_SCALER    = os.path.join(CKPT_DIR, "scaler.pkl")
@@ -41,55 +24,48 @@ BATCH_SIZE    = 16
 # FEATURE EXTRACTION
 # ══════════════════════════════════════════
 def csv_to_features(df, seq_length=5000):
-    """
-    Input : DataFrame với cột:
-            protocol;length;relative_time;direction;src_ip;src_port;dst_ip;dst_port
-    Output: (dir_seq, iat_seq, size_norm, meta_13)
-    """
-    # 1. Trích xuất mảng thô ban đầu từ dữ liệu CSV
-    dirs    = np.where(df['direction'].values == 0, -1, 1)
-    times   = df['relative_time'].values
-    lengths = df['length'].values
+    dirs    = df['direction'].values.astype(int)
+    times   = df['relative_time'].values.astype(np.float32)
+    lengths = df['length'].values.astype(np.float32)
 
-    # 2. Khởi tạo mảng đệm (Padding) với kiểu dữ liệu KHỚP TUYỆT ĐỐI với notebook gốc
-    dir_seq  = np.zeros(seq_length, dtype=np.int8)       # Notebook dùng int8
-    time_seq = np.zeros(seq_length, dtype=np.float32)    # Notebook dùng float32
-    size_seq = np.zeros(seq_length, dtype=np.float32)    # Notebook dùng float32
+    dirs_enc = np.where(dirs == 0, -1, 1)
 
-    limit = min(len(dirs), seq_length)
-    dir_seq[:limit]  = dirs[:limit]
+    limit = min(len(dirs_enc), seq_length)
+
+    dir_seq  = np.zeros(seq_length, dtype=np.float32)
+    time_seq = np.zeros(seq_length, dtype=np.float32)
+    size_seq = np.zeros(seq_length, dtype=np.float32)
+
+    dir_seq[:limit]  = dirs_enc[:limit]
     time_seq[:limit] = times[:limit]
     size_seq[:limit] = lengths[:limit]
 
-    # 3. Tính toán Inter-Arrival Time (IAT) sau khi padding (Khớp với to_input_arrays)
-    # Notebook thực hiện: inter[:, 1:] = time_arr[:, 1:] - time_arr[:, :-1] trên mảng đã padding
-    iat_seq = np.zeros_like(time_seq)
-    iat_seq[1:] = time_seq[1:] - time_seq[:-1]
+    # IAT (inter-arrival time)
+    iat_seq = np.zeros(seq_length, dtype=np.float32)
+    iat_seq[1:limit] = time_seq[1:limit] - time_seq[:limit-1]
 
-    # 4. Chuẩn hóa kích thước gói tin (Size)
+    # Size normalize về [0,1]
     size_norm = size_seq / 1500.0
 
-    # 5. Tính toán Metadata 13 chiều dựa trên file gốc (Khớp logic notebook gốc)
-    in_mask, out_mask = (dirs == -1), (dirs == 1)
-    ti = int(np.sum(in_mask))
+    in_mask  = dirs_enc == -1
+    out_mask = dirs_enc == 1
+    ti  = int(np.sum(in_mask))
     to_ = int(np.sum(out_mask))
-    tp = ti + to_
-    tt = float(times[-1]) if tp > 0 else 0.0
+    tp  = ti + to_
 
     if tp == 0:
-        meta = np.zeros(13, dtype=np.float32)
+        meta = np.zeros(META_DIM_RAW, dtype=np.float32)
     else:
-        msi = float(np.mean(lengths[in_mask]))  if ti   > 0 else 0.0
+        msi = float(np.mean(lengths[in_mask]))  if ti  > 0 else 0.0
         mso = float(np.mean(lengths[out_mask])) if to_ > 0 else 0.0
-        mst = float(np.mean(lengths))           if tp   > 0 else 0.0
+        mst = float(np.mean(lengths))
         ri  = msi / mst if mst > 0 else 0.0
         ro  = mso / mst if mst > 0 else 0.0
-        
+        tt  = float(times[-1]) if len(times) > 0 else 0.0   # times[-1] như notebook
         tin  = times[in_mask]
         tout = times[out_mask]
-        mti  = float(np.mean(np.diff(tin)))  if len(tin)   > 1 else 0.0
+        mti  = float(np.mean(np.diff(tin)))  if len(tin)  > 1 else 0.0
         mto  = float(np.mean(np.diff(tout))) if len(tout) > 1 else 0.0
-        
         meta = np.array(
             [tp, ti, to_, ti/tp, to_/tp, tt, tt/tp, mso, msi, ri, ro, mti, mto],
             dtype=np.float32
@@ -99,7 +75,7 @@ def csv_to_features(df, seq_length=5000):
 
 
 # ══════════════════════════════════════════
-# MODEL BUILD (copy từ app.py)
+# MODEL BUILD 
 # ══════════════════════════════════════════
 def build_model(num_classes, meta_dim, seq_length=5000):
     import tensorflow as tf
@@ -221,8 +197,7 @@ def main():
     print(f"      Found {len(classes)} classes")
 
     # ── Bước 2: Load tất cả traces ──
-    print(f"\n[2/5] Loading traces (all)...")
-    #print(f"\n[2/5] Loading traces (max {MAX_PER_CLASS} per class)...")
+    print(f"\n[2/5] Loading traces...")
     t_start = time.time()
 
     all_dirs, all_iats, all_sizes, all_metas, all_labels = [], [], [], [], []
@@ -234,7 +209,7 @@ def main():
         cls_dir = os.path.join(DATASET_DIR, cls_name)
         #files   = sorted([f for f in os.listdir(cls_dir) if f.endswith('.csv')])[:MAX_PER_CLASS]
         files = sorted([f for f in os.listdir(cls_dir) if f.endswith('.csv')])
-
+        
         loaded = 0
         for fname in files:
             try:
@@ -332,6 +307,21 @@ def main():
     with open(OUT_LABELS, 'w') as f:
         json.dump(label_map, f, indent=2)
     print(f"      Saved: {OUT_LABELS}  ({len(label_map)} classes)")
+
+    threshold_path = os.path.join(CKPT_DIR, 'threshold.json')
+    with open(threshold_path, 'w') as f:
+        json.dump({
+            "cos_threshold": 0.1531,
+            "note": "optimized F1 on open-world test set via precision_recall_curve",
+            "metrics": {
+                "accuracy":  0.9083,
+                "recall":    0.9303,
+                "precision": 0.9325,
+                "f1":        0.9314,
+                "auc_roc":   0.9619,
+            }
+        }, f, indent=2)
+    print(f"      Saved: {threshold_path}  (threshold=0.1531)")
 
     print(f"\n{'='*55}")
     print(f"  Done! Total time: {time.time()-t_start:.1f}s")

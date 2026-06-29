@@ -1,19 +1,3 @@
-"""
-DeepMASQUE Flask Backend
-========================
-Chạy: python app.py
-API:  http://localhost:5000
-
-Cấu trúc thư mục cần có:
-  app.py
-  checkpoints/
-      latest.weights.h5      ← model weights
-      centroids.npy          ← build trước bằng: python3 scripts/build_centroids.py
-      label_map.json         ← tự sinh bởi build_centroids.py
-      scaler.pkl             ← tự sinh bởi build_centroids.py
-      selector.pkl           ← tự sinh bởi build_centroids.py
-"""
-
 import os, gc, json, time, threading, pickle
 import numpy as np
 import pandas as pd
@@ -29,19 +13,17 @@ from tensorflow.keras.layers import (
     BatchNormalization, Input, Lambda
 )
 
-# ══════════════════════════════════════════
-# CONFIG — chỉnh đường dẫn ở đây
-# ══════════════════════════════════════════
 CONFIG = {
-    "weights_path":   "checkpoints/latest.weights.h5",
+    "weights_path":   "checkpoints/best.weights.h5",
     "centroids_path": "checkpoints/centroids.npy",
     "label_map_path": "checkpoints/label_map.json",
     "scaler_path":    "checkpoints/scaler.pkl",
     "selector_path":  "checkpoints/selector.pkl",
+    "threshold_path": "checkpoints/threshold.json",
     "seq_length":     5000,
     "num_monitored":  300,
     "meta_dim":       9,
-    "cos_threshold":  0.1531,
+    "cos_threshold":  0.1531,  # fallback nếu threshold.json chưa có
 }
 
 app = Flask(__name__)
@@ -57,9 +39,6 @@ MODEL_READY = False
 LOAD_STATUS = {"status": "idle", "message": ""}
 
 
-# ══════════════════════════════════════════
-# MODEL ARCHITECTURE (copy từ notebook)
-# ══════════════════════════════════════════
 params = {'kernel_initializer': 'he_normal'}
 
 def dilated_basic_1d(filters, suffix, stage=0, block=0,
@@ -153,18 +132,11 @@ def build_model(num_classes, meta_dim, seq_length=5000):
 # FEATURE EXTRACTION (từ CSV 8 cột)
 # ══════════════════════════════════════════
 def csv_to_features(df, seq_length=5000, client_ip=None):
-    """
-    Input: DataFrame với cột protocol;length;relative_time;direction;src_ip;src_port;dst_ip;dst_port
-    Output: (dir_seq, iat_seq, size_norm, meta_13)
-    """
-    # Dùng cột direction có sẵn (đã được pcap2csv.py set đúng)
-    # client_ip chỉ dùng để override nếu cột direction không đáng tin
     if client_ip and 'src_ip' in df.columns:
         dirs = np.where(df['src_ip'].values == client_ip, 1, 0)
     else:
         dirs = df['direction'].values.astype(int)
 
-    # direction encode khớp notebook: direction==0 → -1, direction==1 → +1
     dirs_encoded = np.where(dirs == 0, -1, 1)
 
     times   = df['relative_time'].values.astype(np.float32)
@@ -215,7 +187,6 @@ def csv_to_features(df, seq_length=5000, client_ip=None):
 
 
 def prepare_model_inputs(dir_seq, iat_seq, size_seq, meta_9dim):
-    """Reshape về đúng shape model cần: (1, seq_length, 1)"""
     dir_arr  = np.expand_dims(dir_seq,  axis=(0, -1)).astype(np.float32)
     time_arr = np.expand_dims(iat_seq,  axis=(0, -1)).astype(np.float32)
     size_arr = np.expand_dims(size_seq, axis=(0, -1)).astype(np.float32)
@@ -235,7 +206,6 @@ def load_model_and_centroids():
     global MODEL, CENTROIDS, LABEL_MAP, SCALER, SELECTOR, MODEL_READY, LOAD_STATUS
 
     try:
-        # ── Kiểm tra tất cả file cần thiết ──
         required = {
             "weights":   CONFIG['weights_path'],
             "centroids": CONFIG['centroids_path'],
@@ -283,6 +253,16 @@ def load_model_and_centroids():
             SELECTOR = pickle.load(f)
         print(f"[+] Scaler & selector loaded")
 
+        # ── Load threshold ──
+        thr_path = CONFIG['threshold_path']
+        if os.path.exists(thr_path):
+            with open(thr_path) as f:
+                thr_data = json.load(f)
+            CONFIG['cos_threshold'] = thr_data['cos_threshold']
+            print(f"[+] Threshold loaded: {CONFIG['cos_threshold']} (from {thr_path})")
+        else:
+            print(f"[!] threshold.json not found, using fallback: {CONFIG['cos_threshold']}")
+
         MODEL_READY = True
         LOAD_STATUS = {"status": "ready", "message": f"Model ready. {len(LABEL_MAP)} classes."}
         print("[+] Model ready!")
@@ -296,11 +276,25 @@ def load_model_and_centroids():
 # PREDICT PIPELINE
 # ══════════════════════════════════════════
 def predict_single_trace(df, client_ip=None):
-    """
-    Input:  DataFrame CSV (8 cột)
-    Output: dict với prediction result
-    """
     seq_length = CONFIG['seq_length']
+
+    # ── Filter: chỉ giữ QUIC (protocol=1) ──
+    df = df[df['protocol'] == 1].reset_index(drop=True)
+    if len(df) == 0:
+        return {"error": "No QUIC packets in trace. Make sure victim is using MASQUE/QUIC."}
+
+    # ── Filter: chỉ giữ traffic đến/từ proxy MASQUE (port 443) ──
+    # Dataset gốc chỉ có traffic client ↔ proxy, loại bỏ DNS/other
+    df = df[
+        (df['src_port'] == 443) | (df['dst_port'] == 443)
+    ].reset_index(drop=True)
+    if len(df) == 0:
+        return {"error": "No QUIC/443 packets. Victim may not be using MASQUE proxy."}
+
+    # ── Recalculate relative_time từ 0 sau khi filter ──
+    df = df.copy()
+    first_time = df['relative_time'].iloc[0]
+    df['relative_time'] = df['relative_time'] - first_time
 
     # 1. Extract features
     dir_seq, iat_seq, size_seq, meta_13 = csv_to_features(df, seq_length, client_ip)
@@ -362,10 +356,6 @@ def status():
 
 @app.route('/predict/csv', methods=['POST'])
 def predict_from_csv():
-    """
-    Upload file CSV trực tiếp.
-    Form field: file (CSV file), client_ip (optional)
-    """
     if not MODEL_READY:
         return jsonify({"error": "Model not ready yet", "load_status": LOAD_STATUS}), 503
 
@@ -393,10 +383,6 @@ def predict_from_csv():
 
 @app.route('/predict/path', methods=['POST'])
 def predict_from_path():
-    """
-    Nhận đường dẫn file CSV trên server.
-    Body JSON: {"csv_path": "/tmp/trace.csv", "client_ip": "192.168.0.120"}
-    """
     if not MODEL_READY:
         return jsonify({"error": "Model not ready yet", "load_status": LOAD_STATUS}), 503
 
@@ -424,11 +410,6 @@ def predict_from_path():
 
 @app.route('/predict/pcap', methods=['POST'])
 def predict_from_pcap():
-    """
-    Upload file PCAP, tự convert sang CSV rồi predict.
-    Cần cài: pip install scapy
-    Form field: file (PCAP), client_ip (required để lọc traffic đúng)
-    """
     if not MODEL_READY:
         return jsonify({"error": "Model not ready yet", "load_status": LOAD_STATUS}), 503
 
@@ -488,6 +469,42 @@ def predict_from_pcap():
     finally:
         if os.path.exists(tmp_pcap):
             os.remove(tmp_pcap)
+
+
+@app.route('/threshold', methods=['GET'])
+def get_threshold():
+    """Xem threshold hiện tại."""
+    return jsonify({
+        "cos_threshold": CONFIG['cos_threshold'],
+        "source": CONFIG['threshold_path'] if os.path.exists(CONFIG['threshold_path']) else "fallback"
+    })
+
+
+@app.route('/threshold', methods=['POST'])
+def set_threshold():
+    data = request.get_json() or {}
+    val = data.get('cos_threshold')
+    if val is None or not isinstance(val, (int, float)):
+        return jsonify({"error": "cos_threshold must be a number"}), 400
+    if not (0 < val < 1):
+        return jsonify({"error": "cos_threshold must be between 0 and 1"}), 400
+
+    CONFIG['cos_threshold'] = float(val)
+
+    # Lưu lại vào file
+    thr_path = CONFIG['threshold_path']
+    try:
+        existing = {}
+        if os.path.exists(thr_path):
+            with open(thr_path) as f:
+                existing = json.load(f)
+        existing['cos_threshold'] = float(val)
+        with open(thr_path, 'w') as f:
+            json.dump(existing, f, indent=2)
+    except Exception as e:
+        return jsonify({"ok": True, "cos_threshold": val, "warning": f"Could not save to file: {e}"})
+
+    return jsonify({"ok": True, "cos_threshold": val, "saved": thr_path})
 
 
 @app.route('/labels', methods=['GET'])
@@ -564,10 +581,6 @@ def detect_gateway():
 # ── Scan ──
 @app.route('/attack/scan', methods=['POST'])
 def attack_scan():
-    """
-    Chạy nmap -sn để scan host trong subnet.
-    Body: {"subnet": "192.168.0.0/24"}
-    """
     data = request.get_json() or {}
     subnet = data.get("subnet", "192.168.0.0/24")
 
@@ -611,10 +624,6 @@ def attack_scan():
 # ── ARP Spoofing ──
 @app.route('/attack/arp/start', methods=['POST'])
 def arp_start():
-    """
-    Bật ARP poisoning.
-    Body: {"victim_ip": "...", "gateway_ip": "...", "interface": "ens33"}
-    """
     data = request.get_json() or {}
     victim_ip  = data.get("victim_ip")
     gateway_ip = data.get("gateway_ip", "192.168.0.1")
@@ -690,11 +699,6 @@ def arp_stop():
 # ── Capture ──
 @app.route('/attack/capture/start', methods=['POST'])
 def capture_start():
-    """
-    Bắt đầu tcpdump.
-    Body: {"victim_ip": "...", "interface": "ens33",
-           "pcap_path": "/tmp/victim_traffic.pcap", "duration": 30}
-    """
     data       = request.get_json() or {}
     victim_ip  = data.get("victim_ip") or ATTACK_STATE.get("victim_ip")
     iface      = data.get("interface") or ATTACK_STATE.get("interface", "ens33")
@@ -796,10 +800,6 @@ def capture_status():
 # ── Convert ──
 @app.route('/attack/convert', methods=['POST'])
 def attack_convert():
-    """
-    Chạy pcap2csv.py để convert pcap → csv.
-    Body: {"pcap_path": "...", "csv_path": "...", "client_ip": "..."}
-    """
     data       = request.get_json() or {}
     pcap_path  = data.get("pcap_path")  or ATTACK_STATE.get("pcap_path", "/tmp/victim_traffic.pcap")
     csv_path   = data.get("csv_path")   or ATTACK_STATE.get("csv_path",  "/tmp/trace.csv")
